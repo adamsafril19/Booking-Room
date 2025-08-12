@@ -1,0 +1,142 @@
+services:
+  # Databases
+  auth-db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: auth_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: adamsafril234
+    volumes:
+      - auth_db_data:/var/lib/postgresql/data
+    networks:
+      - micro_net
+
+  room-db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: room_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: adamsafril234
+    volumes:
+      - room_db_data:/var/lib/postgresql/data
+    networks:
+      - micro_net
+
+  booking-db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: booking_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: adamsafril234
+    volumes:
+      - booking_db_data:/var/lib/postgresql/data
+    networks:
+      - micro_net
+
+  reporting-db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: reporting_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: adamsafril234
+    volumes:
+      - reporting_db_data:/var/lib/postgresql/data
+    networks:
+      - micro_net
+
+  # Redis
+  redis:
+    image: redis:7
+    networks:
+      - micro_net
+
+  # Traefik
+  traefik:
+    image: traefik:v2.10
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--entrypoints.web.address=:80"
+      - "--api.dashboard=true"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - micro_net
+
+  # Laravel Services
+  auth-service:
+    build: ./auth-service
+    env_file: ./auth-service/.env
+    depends_on:
+      - auth-db
+      - redis
+    networks:
+      - micro_net
+    ports:
+      - "8001:80"
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.auth.rule=Host(`auth.localhost`)"
+      - "traefik.http.services.auth.loadbalancer.server.port=80"
+
+  room-service:
+    build: ./room-service
+    env_file: ./room-service/.env
+    depends_on:
+      - room-db
+      - redis
+    networks:
+      - micro_net
+    ports:
+      - "8002:80"
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.room.rule=Host(`room.localhost`)"
+      - "traefik.http.services.room.loadbalancer.server.port=80"
+
+  booking-service:
+    build: ./booking-service
+    env_file: ./booking-service/.env
+    depends_on:
+      - booking-db
+      - redis
+    networks:
+      - micro_net
+    ports:
+      - "8003:80"
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.booking.rule=Host(`booking.localhost`)"
+      - "traefik.http.services.booking.loadbalancer.server.port=80"
+
+  reporting-service:
+    build: ./reporting-service
+    env_file: ./reporting-service/.env
+    depends_on:
+      - reporting-db
+      - redis
+    networks:
+      - micro_net
+    ports:
+      - "8004:80"
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.reporting.rule=Host(`reporting.localhost`)"
+      - "traefik.http.services.reporting.loadbalancer.server.port=80"
+
+volumes:
+  auth_db_data:
+  room_db_data:
+  booking_db_data:
+  reporting_db_data:
+
+networks:
+  micro_net:
+    driver: bridge
