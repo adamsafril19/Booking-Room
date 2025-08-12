@@ -1,1 +1,3 @@
 /.superdesign
+node_modules
+.env
