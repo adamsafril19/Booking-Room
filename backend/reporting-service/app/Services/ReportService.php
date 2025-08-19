@@ -78,14 +78,20 @@ class ReportService
         $options = new Options();
         $options->set('isRemoteEnabled', true);
         $options->set('isHtml5ParserEnabled', true);
-        $options->set('defaultFont', 'DejaVu Sans'); // gunakan font yang mendukung banyak glyph
+        $options->set('defaultFont', 'Arial'); // gunakan font yang lebih aman
         $options->set('defaultPaperSize', 'a4');
         $options->set('defaultMediaType', 'print');
+        $options->set('chroot', []);
 
         $dompdf = new Dompdf($options);
 
         // Supaya cache font dan tmp directory benar
-        $dompdf->set_option('fontCache', storage_path('fonts'));
+        $fontCacheDir = storage_path('fonts');
+        if (!file_exists($fontCacheDir)) {
+            mkdir($fontCacheDir, 0755, true);
+        }
+
+        $dompdf->set_option('fontCache', $fontCacheDir);
         $dompdf->set_option('tempDir', sys_get_temp_dir());
         $dompdf->set_option('isFontSubsettingEnabled', true);
 
@@ -189,14 +195,27 @@ class ReportService
      */
     private function forceUtf8(string $s): string
     {
+        // Jika string kosong, return langsung
+        if (empty($s)) {
+            return $s;
+        }
+
         // ensure it's UTF-8: convert from detected enc to UTF-8, then iconv IGNORE
         $enc = mb_detect_encoding($s, ['UTF-8', 'ISO-8859-1', 'WINDOWS-1252', 'ASCII'], true) ?: 'UTF-8';
-        $s = mb_convert_encoding($s, 'UTF-8', $enc);
 
-        // remove invalid sequences
-        $s = iconv('UTF-8', 'UTF-8//IGNORE', $s);
+        // Jika sudah UTF-8, masih perlu dibersihkan dari karakter invalid
+        if ($enc !== 'UTF-8') {
+            $s = mb_convert_encoding($s, 'UTF-8', $enc);
+        }
 
-        return $s;
+        // remove invalid sequences dengan lebih aman
+        $clean = @iconv('UTF-8', 'UTF-8//IGNORE', $s);
+        if ($clean === false) {
+            // Fallback jika iconv gagal
+            $clean = mb_convert_encoding($s, 'UTF-8', 'UTF-8');
+        }
+
+        return $clean ?: '';
     }
 
     /**

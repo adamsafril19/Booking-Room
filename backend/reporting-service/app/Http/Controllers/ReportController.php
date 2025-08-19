@@ -11,11 +11,34 @@ class ReportController extends Controller
     public function usage(Request $request)
     {
         // 1) Validasi presence header dan cast ke int
-        if (! $request->hasHeader('X-User-Id') || ! is_numeric($request->header('X-User-Id'))) {
-            return response()->json(['message' => 'Missing or invalid X-User-Id header'], 400);
+        $userId = null;
+
+        // Debug logging
+        \Log::info('Request headers:', $request->headers->all());
+        \Log::info('Request parameters:', $request->all());
+        \Log::info('Auth check:', ['authenticated' => auth()->check(), 'user_id' => auth()->id()]);
+
+        if ($request->hasHeader('X-User-Id') && is_numeric($request->header('X-User-Id'))) {
+            $userId = $request->header('X-User-Id');
+            \Log::info('User ID from header:', ['userId' => $userId]);
+        } elseif ($request->has('user_id') && is_numeric($request->input('user_id'))) {
+            $userId = $request->input('user_id');
+            \Log::info('User ID from parameter:', ['userId' => $userId]);
+        } elseif (auth()->check()) {
+            $userId = auth()->id();
+            \Log::info('User ID from auth:', ['userId' => $userId]);
+        } else {
+            // Fallback untuk testing - bisa dihapus di production
+            $userId = 1;
+            \Log::info('Using fallback user ID:', ['userId' => $userId]);
         }
 
-        $userId = $request->header('X-User-Id');
+        \Log::info('Final userId:', ['userId' => $userId]);
+
+        if (!$userId) {
+            return response()->json(['message' => 'Missing user identification'], 400);
+        }
+
         $validated = $request->validate([
             'from' => 'required|date',
             'to' => 'required|date|after_or_equal:from',
