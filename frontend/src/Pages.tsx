@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { useAuth } from "./hooks/useAuth";
+import { useAuth } from "./context/AuthContext";
 import { Box, Container, CssBaseline } from "@mui/material";
 import NavigationDrawer from "./components/NavigationDrawer";
 import Login from "./pages/Login";

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../context/AuthContext";
 import Card from "../components/Card";
 import Button from "../components/Button";
 import { bookingApi } from "../api/api";

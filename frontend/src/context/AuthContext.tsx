@@ -1,19 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import type { ReactNode } from "react";
-import {
-  authApi,
-  baseApi,
-  getCookie,
-  roomApi,
-  bookingApi,
-  reportingApi,
-} from "../api/api";
+import { authClient } from "../api/client";
+import { setAuthToken } from "../api/api";
 
 interface User {
   id: number;
   name: string;
   email: string;
-  roles: Array<{ id: number; name: string }>;
+  roles?: Array<{ id: number; name: string }>;
 }
 
 interface AuthContextType {
@@ -40,94 +34,116 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [user, setUser]     = useState<User|null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [token, setToken]    = useState<string|null>(null);
+  const [token, setToken] = useState<string | null>(null);
 
-  // 1) set/remove header Authorization
-  const setAuthHeader = (token: string|null) => {
-    const headerKey = "Authorization";
-    const bearer   = token ? `Bearer ${token}` : null;
-    [authApi, roomApi, bookingApi, reportingApi].forEach((api) => {
-      if (bearer) {
-        api.defaults.headers.common[headerKey] = bearer;
-      } else {
-        delete api.defaults.headers.common[headerKey];
-      }
-    });
-  };
-
-  // 2) fetch current user profile
+  // Fetch current user profile menggunakan API Gateway
   const fetchUser = async () => {
     try {
-      const res = await authApi.get("/me");
-      setUser(res.data);
-    } catch {
+      const userData = await authClient.getCurrentUser();
+      setUser(userData.user || userData); // Handle different response formats
+    } catch (error) {
+      console.error("Failed to fetch user:", error);
       setUser(null);
+      // Clear invalid token
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      setAuthToken(null);
+      setToken(null);
     } finally {
       setLoading(false);
     }
   };
 
-  // 3) init: baca token & set header, lalu fetchUser
+  // Initialize: check stored token and fetch user
   useEffect(() => {
-    const stored = localStorage.getItem("token");
-    if (stored) {
-      setToken(stored);
-      setAuthHeader(stored);
+    const storedToken = localStorage.getItem("token");
+    const storedUser = localStorage.getItem("user");
+
+    if (storedToken) {
+      setToken(storedToken);
+      setAuthToken(storedToken);
+
+      // If we have stored user data, use it temporarily while fetching fresh data
+      if (storedUser) {
+        try {
+          setUser(JSON.parse(storedUser));
+        } catch (error) {
+          console.error("Failed to parse stored user data:", error);
+        }
+      }
+
       fetchUser();
     } else {
       setLoading(false);
     }
   }, []);
 
-  // 4) login
+  // Login function menggunakan API Gateway
   const login = async (email: string, password: string) => {
-    await baseApi.get("/sanctum/csrf-cookie");
-    const xsrf = getCookie("XSRF-TOKEN");
-    if (!xsrf) throw new Error("Gagal baca XSRF-TOKEN");
-    authApi.defaults.headers.common["X-XSRF-TOKEN"] = decodeURIComponent(xsrf);
-
-    const res = await authApi.post("/login", { email, password });
-    const accessToken = res.data.access_token;
-    localStorage.setItem("token", accessToken);
-
-    setToken(accessToken);
-    setAuthHeader(accessToken);
-    await fetchUser();
-  };
-
-  // 5) register
-  const register = async (name: string, email: string, password: string) => {
-    await baseApi.get("/sanctum/csrf-cookie");
-    await authApi.post("/register", { name, email, password });
-    await fetchUser();
-  };
-
-  // 6) logout
-  const logout = async () => {
     try {
-      await authApi.post("/logout");
-    } catch (e) {
-      console.error("Logout gagal:", e);
-    } finally {
-      localStorage.removeItem("token");
-      setToken(null);
-      setAuthHeader(null);
-      setUser(null);
+      const response = await authClient.login(email, password);
+
+      // Handle different response formats
+      const tokenValue = response.token || response.access_token;
+      const userData = response.user || response.data?.user;
+
+      if (!tokenValue) {
+        throw new Error("No token received from server");
+      }
+
+      setToken(tokenValue);
+      setAuthToken(tokenValue);
+
+      if (userData) {
+        setUser(userData);
+        localStorage.setItem("user", JSON.stringify(userData));
+      }
+
+      localStorage.setItem("token", tokenValue);
+    } catch (error) {
+      console.error("Login failed:", error);
+      throw error;
     }
   };
 
+  // Register function menggunakan API Gateway
+  const register = async (name: string, email: string, password: string) => {
+    try {
+      await authClient.register(name, email, password);
+    } catch (error) {
+      console.error("Registration failed:", error);
+      throw error;
+    }
+  };
+
+  // Logout function menggunakan API Gateway
+  const logout = async () => {
+    try {
+      await authClient.logout();
+    } catch (error) {
+      console.error("Logout error:", error);
+    } finally {
+      // Always clear local state
+      setUser(null);
+      setToken(null);
+      setAuthToken(null);
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+    }
+  };
+
+  const contextValue: AuthContextType = {
+    user,
+    loading,
+    login,
+    register,
+    logout,
+    token,
+  };
+
   return (
-    <AuthContext.Provider value={{
-      user,
-      loading,
-      login,
-      register,
-      logout,
-      token
-    }}>
-      {children}
-    </AuthContext.Provider>
+    <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>
   );
 };
